@@ -148,6 +148,7 @@ def get_sprints_by_board_id_with(board_id, days_before):
                                          {"board_id": 1,
                                           "startDate": 1,
                                           "completedIssuesEstimateSum": 1,
+                                          "name": 1,
                                           "issuesNotCompletedEstimateSum": 1}))
 
     result = []
@@ -162,7 +163,12 @@ def get_sprints_by_board_id_with(board_id, days_before):
             not_completed = 0
 
         response_dict["completed_estimate"] = completed
-        response_dict["not_completed_estimate"] = not_completed + completed
+        commited = not_completed + completed
+        response_dict["not_completed_estimate"] = commited
+        ration = float(completed) / float(commited)
+        response_dict["percentage_completed"] = round(100.0 * ration)
+        response_dict["name"] = sprint["name"]
+        response_dict["mean"] = 75
 
         start_date = sprint['startDate']
 
@@ -189,5 +195,5 @@ def get_board_by_id(board_id):
 if __name__ == '__main__':
     # get_sprints_by_board_id_with(491, 365)
     # print commit_stats(   )
-    app.run()
+    app.run('0.0.0.0')
     # commit_stats()
