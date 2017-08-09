@@ -144,32 +144,27 @@ def commit_stats():
     return jsonify(response)
 
 
-@app.route('/sprint/<int:board_id>/<int:days_before>')
-def get_sprints_by_board_id(board_id, days_before):
+@app.route('/commit_timeline/<int:board_id>/<int:days_before>')
+def get_commits(board_id, days_before):
     start = datetime.now() - timedelta(days_before)
     db = get_db()
-    sprints = db.sprints
-    filtered_sprints = list(sprints.find({'board_id': board_id, 'startDate': {'$gte': start}},
-                                         {"board_id": 1,
-                                          "name": 1,
-                                          "completedIssuesEstimateSum": 1,
-                                          "issuesNotCompletedEstimateSum": 1}))
+    commits = db.commits
 
-    response = {"completed_estimate": [], "not_completed_estimate": [], "sprint_name": []}
+    filtered_commits = commits.find({'board_id': board_id, 'time_of_commit': {'$gte': start}},
+                                    {"additions": 1, "deletions": 1, "time_of_commit": 1})
 
-    for sprint in filtered_sprints:
-        not_completed = sprint['issuesNotCompletedEstimateSum']
-        completed = sprint['completedIssuesEstimateSum']
-        if not_completed is None and completed is None:
-            continue
-        if not_completed is None:
-            not_completed = 0
+    result = []
+    for commit in filtered_commits:
+        if "time_of_commit" in commit:
+            date = commit["time_of_commit"]
+            date = date.strftime("%Y%m%d")
+            response_dict = {"additions": commit["additions"], "deletions": commit["deletions"], "date": date}
+            result.append(response_dict)
 
-        response["completed_estimate"].append(completed)
-        response["not_completed_estimate"].append(not_completed)
-        response["sprint_name"].append(sprint['name'])
-
-    return jsonify(response)
+    sorted_result = sorted(result, key=lambda k: k['date'])
+    response = jsonify(sorted_result)
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    return response
 
 
 @app.route('/sprint_time_line/<int:board_id>/<int:days_before>')
@@ -318,6 +313,5 @@ def get_board_by_id(board_id):
 
 if __name__ == '__main__':
     # get_sprints_by_board_id_with(491, 365)
-    # print commit_stats(   )
     app.run('0.0.0.0')
     # commit_stats()
