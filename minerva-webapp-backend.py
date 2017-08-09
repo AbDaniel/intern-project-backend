@@ -1,4 +1,5 @@
 import csv
+from statistics import mean
 
 from flask import Flask
 from flask import jsonify
@@ -58,6 +59,38 @@ def get_boards():
     # response = jsonify(result)
     response.headers.add('Access-Control-Allow-Origin', '*')
     return response
+
+
+def mean_velocity():
+    db = get_db()
+    boards = db.boards
+    sprints = db.sprints
+
+    board_ids = [board['_id'] for board in boards.find({}, {'_id': 1})]
+
+    mean_per_board = []
+    for board_id in board_ids:
+        filtered_sprints = list(sprints.find({'board_id': board_id, 'state': 'CLOSED'},
+                                             {"board_id": 1,
+                                              "completedIssuesEstimateSum": 1,
+                                              "name": 1,
+                                              "issuesNotCompletedEstimateSum": 1}))
+        mean_per_sprint = []
+        for sprint in filtered_sprints:
+            not_completed = sprint['issuesNotCompletedEstimateSum']
+            completed = sprint['completedIssuesEstimateSum']
+            if not_completed is None and completed is None:
+                continue
+            if not_completed is None:
+                not_completed = 0
+
+            committed = not_completed + completed
+            ration = float(completed) / float(committed)
+            percentage_completed = 100.0 * ration
+            mean_per_sprint.append(percentage_completed)
+
+        mean_per_board.append(mean(mean_per_sprint))
+    return round(mean(mean_per_board))
 
 
 @app.route('/build/stats')
@@ -144,7 +177,7 @@ def get_sprints_by_board_id_with(board_id, days_before):
     start = datetime.now() - timedelta(days_before)
     db = get_db()
     sprints = db.sprints
-    filtered_sprints = list(sprints.find({'board_id': board_id, 'startDate': {'$gte': start}},
+    filtered_sprints = list(sprints.find({'board_id': board_id, 'state': 'CLOSED', 'startDate': {'$gte': start}},
                                          {"board_id": 1,
                                           "startDate": 1,
                                           "completedIssuesEstimateSum": 1,
@@ -162,13 +195,13 @@ def get_sprints_by_board_id_with(board_id, days_before):
         if not_completed is None:
             not_completed = 0
 
-        response_dict["completed_estimate"] = completed
+        response_dict["Completed"] = completed
         commited = not_completed + completed
-        response_dict["not_completed_estimate"] = commited
+        response_dict["Committed"] = commited
         ration = float(completed) / float(commited)
-        response_dict["percentage_completed"] = round(100.0 * ration)
+        response_dict["Percentage Completed"] = round(100.0 * ration)
         response_dict["name"] = sprint["name"]
-        response_dict["mean"] = 75
+        response_dict["Mean"] = 75
 
         start_date = sprint['startDate']
 
@@ -177,6 +210,97 @@ def get_sprints_by_board_id_with(board_id, days_before):
         result.append(response_dict)
 
     response = jsonify(result)
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    return response
+
+
+@app.route('/sprint_time_line/velocity/<int:board_id>/<int:days_before>')
+def get_velocity(board_id, days_before):
+    start = datetime.now() - timedelta(days_before)
+    db = get_db()
+    sprints = db.sprints
+
+    # mean = compute_mean(board_id)
+    filtered_sprints = list(sprints.find({'board_id': board_id, 'state': 'CLOSED', 'startDate': {'$gte': start}},
+                                         {"board_id": 1,
+                                          "startDate": 1,
+                                          "completedIssuesEstimateSum": 1,
+                                          "name": 1,
+                                          "issuesNotCompletedEstimateSum": 1}))
+
+    result = []
+
+    for sprint in filtered_sprints:
+        response_dict = {}
+        not_completed = sprint['issuesNotCompletedEstimateSum']
+        completed = sprint['completedIssuesEstimateSum']
+        if not_completed is None and completed is None:
+            continue
+        if not_completed is None:
+            not_completed = 0
+
+        committed = not_completed + completed
+        ration = float(completed) / float(committed)
+        response_dict["Percentage Completed"] = round(100.0 * ration)
+        response_dict["name"] = sprint["name"]
+        response_dict["Mean Baseline"] = mean_velocity()
+
+        start_date = sprint['startDate']
+
+        start_date = start_date.strftime("%Y%m%d")
+        response_dict["date"] = start_date
+        result.append(response_dict)
+
+    response = jsonify(result)
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    return response
+
+
+@app.route('/sprint_time_line/users/<int:board_id>/<int:days_before>')
+def get_sprints_by_board_id_by_users(board_id, days_before):
+    start = datetime.now() - timedelta(days_before)
+    db = get_db()
+    sprints = db.sprints
+    filtered_sprints = list(sprints.find({'board_id': board_id, 'state': 'CLOSED', 'startDate': {'$gte': start}},
+                                         {"board_id": 1,
+                                          "startDate": 1,
+                                          "completedIssues": 1,
+                                          "name": 1,
+                                          }))
+
+    users = set()
+    for sprint in filtered_sprints:
+        for issue in sprint['completedIssues']:
+            user = issue['assigneeName']
+            if user not in users:
+                estimate = issue['estimateStatistic']['statFieldValue']
+                if 'value' in estimate:
+                    estimate_value = int(estimate['value'])
+                    if estimate_value is not 0:
+                        users.add(user)
+
+    result = []
+    for sprint in filtered_sprints:
+        start_date = sprint['startDate']
+        start_date = start_date.strftime("%Y%m%d")
+
+        response_dict = {"name": sprint["name"], "date": start_date}
+        for user in users:
+            response_dict[user] = 0
+
+        for issue in sprint['completedIssues']:
+            estimate = issue['estimateStatistic']['statFieldValue']
+            if 'value' in estimate:
+                estimate_value = int(estimate['value'])
+                if estimate_value is not 0:
+                    user = issue['assigneeName']
+                    previous_estimate = response_dict[user]
+                    response_dict[user] = previous_estimate + estimate_value
+
+        result.append(response_dict)
+
+    sorted_result = sorted(result, key=lambda k: k['date'])
+    response = jsonify(sorted_result)
     response.headers.add('Access-Control-Allow-Origin', '*')
     return response
 
