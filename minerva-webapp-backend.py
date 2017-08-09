@@ -310,6 +310,40 @@ def get_board_by_id(board_id):
     return response
 
 
+@app.route('/jenkins_timeline/<int:board_id>/<int:days_before>')
+def get_jenkins_timeline(board_id, days_before):
+    start = datetime.now() - timedelta(days_before)
+    db = get_db()
+    mg_builds = db.builds
+    builds = list(mg_builds.find({'board_id': board_id, 'date': {'$gte': start}},
+                                 {"board_id": 1,
+                                  "date": 1,
+                                  "status": 1,
+                                  "_id": 0,
+                                  }))
+
+    total = 0.0
+    success = 0.0
+
+    result = []
+    for build in builds:
+        status = build['status']
+        total += 1.0
+        if status == 'SUCCESS':
+            success += 1.0
+        per = success / total
+        success_percentage = round(100.0 * per)
+        date = build['date']
+        date = date.strftime("%Y%m%d")
+        response_dict = {'Success Percentage': success_percentage, 'date': date}
+        result.append(response_dict)
+
+    sorted_result = sorted(result, key=lambda k: k['date'])
+    response = jsonify(sorted_result)
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    return response
+
+
 if __name__ == '__main__':
     # get_sprints_by_board_id_with(491, 365)
     app.run('0.0.0.0')
