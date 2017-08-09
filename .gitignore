@@ -101,6 +101,7 @@ ENV/
 # User-specific stuff:
 .idea/**/tasks.xml
 .idea/dictionaries
+.idea/workspace.xml
 .idea/*
 
 # Sensitive or high-churn files:

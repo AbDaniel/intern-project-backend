@@ -149,14 +149,13 @@ def get_commits(board_id, days_before):
     start = datetime.now() - timedelta(days_before)
     db = get_db()
     commits = db.commits
-
-    filtered_commits = commits.find({'board_id': board_id, 'time_of_commit': {'$gte': start}},
-                                    {"additions": 1, "deletions": 1, "time_of_commit": 1})
+    filtered_commits = commits.find({'board_id': board_id, 'date': {'$gte': start}},
+                                    {"additions": 1, "deletions": 1, "date": 1})
 
     result = []
     for commit in filtered_commits:
-        if "time_of_commit" in commit:
-            date = commit["time_of_commit"]
+        if "date" in commit:
+            date = commit["date"]
             date = date.strftime("%Y%m%d")
             response_dict = {"additions": commit["additions"], "deletions": commit["deletions"], "date": date}
             result.append(response_dict)
