@@ -8,6 +8,7 @@ from itertools import groupby
 from pymongo import MongoClient
 import pandas as pd
 from datetime import datetime, timedelta
+from collections import Counter
 
 app = Flask(__name__)
 
@@ -351,16 +352,17 @@ def get_commits_count(board_id, days_before):
     db = get_db()
     mg_commits = db.commits
     commits = list(mg_commits.find({'board_id': board_id, 'date': {'$gte': start}},
-                                    {"board_id": 1,
-                                     "date": 1,
-                                     "author_name": 1,
-                                     "_id": 0,
-                                     }))
+                                   {"board_id": 1,
+                                    "date": 1,
+                                    "author_name": 1,
+                                    "_id": 0,
+                                    }))
 
     for commit in commits:
         commit['date'] = commit['date'].date()
 
     g = groupby(commits, lambda x: x['date'])
+    avg_commit_per_day = mean_commit_count_per_day()
 
     result = []
     for key, group in g:
@@ -368,13 +370,21 @@ def get_commits_count(board_id, days_before):
         date = key
         date = date.strftime("%Y%m%d")
 
-        response_dict = {'date': date, 'commits': count}
+        response_dict = {'date': date, 'zAvg Commit Per Day': avg_commit_per_day, 'Commits Count': count}
         result.append(response_dict)
 
     sorted_result = sorted(result, key=lambda k: k['date'])
     response = jsonify(sorted_result)
     response.headers.add('Access-Control-Allow-Origin', '*')
     return response
+
+
+def mean_commit_count_per_day():
+    db = get_db()
+    mg_commits = db.commits
+    dates = [commit['date'].date() for commit in list(mg_commits.find({}, {"date": 1, '_id': 0}))]
+
+    return mean(Counter(dates).values())
 
 
 if __name__ == '__main__':
