@@ -3,6 +3,7 @@ from statistics import mean
 
 from flask import Flask
 from flask import jsonify
+from itertools import groupby
 
 from pymongo import MongoClient
 import pandas as pd
@@ -344,7 +345,39 @@ def get_jenkins_timeline(board_id, days_before):
     return response
 
 
+@app.route('/commit_timeline/count/<int:board_id>/<int:days_before>')
+def get_commits_count(board_id, days_before):
+    start = datetime.now() - timedelta(days_before)
+    db = get_db()
+    mg_commits = db.commits
+    commits = list(mg_commits.find({'board_id': board_id, 'date': {'$gte': start}},
+                                    {"board_id": 1,
+                                     "date": 1,
+                                     "author_name": 1,
+                                     "_id": 0,
+                                     }))
+
+    for commit in commits:
+        commit['date'] = commit['date'].date()
+
+    g = groupby(commits, lambda x: x['date'])
+
+    result = []
+    for key, group in g:
+        count = len(list(group))
+        date = key
+        date = date.strftime("%Y%m%d")
+
+        response_dict = {'date': date, 'commits': count}
+        result.append(response_dict)
+
+    sorted_result = sorted(result, key=lambda k: k['date'])
+    response = jsonify(sorted_result)
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    return response
+
+
 if __name__ == '__main__':
     # get_sprints_by_board_id_with(491, 365)
-    app.run('0.0.0.0')
+    app.run()
     # commit_stats()
