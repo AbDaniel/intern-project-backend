@@ -194,11 +194,6 @@ def get_sprints_by_board_id_with(board_id, days_before):
         response_dict["Completed"] = completed
         commited = not_completed + completed
         response_dict["Committed"] = commited
-        ration = float(completed) / float(commited)
-        response_dict["Percentage Completed"] = round(100.0 * ration)
-        response_dict["name"] = sprint["name"]
-        response_dict["Mean"] = 75
-
         start_date = sprint['startDate']
 
         start_date = start_date.strftime("%Y%m%d")
@@ -238,7 +233,6 @@ def get_velocity(board_id, days_before):
         committed = not_completed + completed
         ration = float(completed) / float(committed)
         response_dict["Percentage Completed"] = round(100.0 * ration)
-        response_dict["name"] = sprint["name"]
         response_dict["Mean Baseline"] = mean_velocity()
 
         start_date = sprint['startDate']
@@ -371,6 +365,44 @@ def get_commits_count(board_id, days_before):
         date = date.strftime("%Y%m%d")
 
         response_dict = {'date': date, 'zAvg Commit Per Day': avg_commit_per_day, 'Commits Count': count}
+        result.append(response_dict)
+
+    sorted_result = sorted(result, key=lambda k: k['date'])
+    response = jsonify(sorted_result)
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    return response
+
+
+@app.route('/commit_timeline/users/<int:board_id>/<int:days_before>')
+def get_count_timeline_users(board_id, days_before):
+    start = datetime.now() - timedelta(days_before)
+    db = get_db()
+    mg_commits = db.commits
+    commits = list(mg_commits.find({'board_id': board_id, 'date': {'$gte': start}},
+                                   {"board_id": 1,
+                                    "date": 1,
+                                    "author_name": 1,
+                                    "_id": 0,
+                                    }))
+
+    users = set()
+    for commit in commits:
+        user_name = commit['author_name']
+        users.add(user_name)
+
+    g = groupby(commits, lambda x: x['date'].strftime("%Y%m%d"))
+
+    result = []
+    for key, group in g:
+        response_dict = {'date': key}
+
+        for user in users:
+            response_dict[user] = 0
+
+        commits = list(group)
+        for commit in commits:
+            user = commit['author_name']
+            response_dict[user] += 1
         result.append(response_dict)
 
     sorted_result = sorted(result, key=lambda k: k['date'])
