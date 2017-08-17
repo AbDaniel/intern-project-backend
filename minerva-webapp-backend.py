@@ -322,6 +322,8 @@ def get_jenkins_timeline(board_id, days_before):
     success = 0.0
 
     result = []
+    mean_percentage = mean_build_percentage()
+
     for build in builds:
         status = build['status']
         total += 1.0
@@ -331,7 +333,7 @@ def get_jenkins_timeline(board_id, days_before):
         success_percentage = round(100.0 * per)
         date = build['date']
         date = date.strftime("%Y%m%d")
-        response_dict = {'Success Percentage': success_percentage, 'date': date}
+        response_dict = {'Success Percentage': success_percentage, 'date': date, 'Mean': mean_percentage}
         result.append(response_dict)
 
     sorted_result = sorted(result, key=lambda k: k['date'])
@@ -411,6 +413,69 @@ def get_count_timeline_users(board_id, days_before):
     return response
 
 
+@app.route('/jenkins_timeline/test_coverage/<int:board_id>/<int:days_before>')
+def get_test_coverage(board_id, days_before):
+    start = datetime.now() - timedelta(days_before)
+    db = get_db()
+    mg_builds = db.builds
+    builds = list(mg_builds.find({'board_id': board_id, 'date': {'$gte': start}},
+                                 {"test_coverage": 1,
+                                  "date": 1,
+                                  "_id": 0,
+                                  }))
+    result = []
+
+    for build in builds:
+        date = build['date'].strftime("%Y%m%d")
+        test_coverage = build['test_coverage']
+        response_dict = {'date': date}
+        if test_coverage:
+            for k, v in test_coverage.items():
+                response_dict[k] = v
+            result.append(response_dict)
+
+    sorted_result = sorted(result, key=lambda k: k['date'])
+    response = jsonify(sorted_result)
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    return response
+
+
+@app.route('/bugs/<int:board_id>/<int:days_before>')
+def get_bug_timeline(board_id, days_before):
+    start = datetime.now() - timedelta(days_before)
+    db = get_db()
+    mg_issues = db.issues
+
+    issues = list(mg_issues.find({'board_id': board_id}, {'_id': 0, 'created': 1, 'issueType': 1}))
+
+    for issue in issues:
+        issue['created'] = issue['created'].strftime("%Y%m%d")
+
+    sorted_issues = sorted(issues, key=lambda k: k['created'])
+
+    result_dict = {}
+    prev_larva = 0
+    prev_bug = 0
+    for issue in sorted_issues:
+        date = issue['created']
+        type = issue['issueType']
+        if type == 'Bug':
+            prev_bug += 1
+        elif type == 'Larva':
+            prev_larva += 1
+        result_dict[date] = {'larva': prev_larva, 'bug': prev_bug}
+
+    result = []
+    for date, value in result_dict.items():
+        response_dict = {'date': date, 'Bug': value['bug'], 'Larva': value['larva']}
+        result.append(response_dict)
+
+    sorted_result = sorted(result, key=lambda k: k['date'])
+    response = jsonify(sorted_result)
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    return response
+
+
 def mean_commit_count_per_day():
     db = get_db()
     mg_commits = db.commits
@@ -419,7 +484,38 @@ def mean_commit_count_per_day():
     return mean(Counter(dates).values())
 
 
+def mean_build_percentage():
+    db = get_db()
+    mg_builds = db.builds
+    boards = db.boards
+
+    board_ids = [board['_id'] for board in boards.find({}, {'_id': 1})]
+    result = []
+    for board_id in board_ids:
+        builds = list(mg_builds.find({'board_id': board_id},
+                                     {"board_id": 1,
+                                      "date": 1,
+                                      "status": 1,
+                                      "_id": 0,
+                                      }))
+
+        total = 0.0
+        success = 0.0
+
+        for build in builds:
+            status = build['status']
+            total += 1.0
+            if status == 'SUCCESS':
+                success += 1.0
+            per = success / total
+            success_percentage = round(100.0 * per)
+            result.append(success_percentage)
+
+    return mean(result)
+
+
 if __name__ == '__main__':
     # get_sprints_by_board_id_with(491, 365)
+    # get_bug_timeline(600, 365)
     app.run()
     # commit_stats()
