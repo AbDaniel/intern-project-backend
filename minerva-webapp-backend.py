@@ -9,6 +9,19 @@ from pymongo import MongoClient
 import pandas as pd
 from datetime import datetime, timedelta
 from collections import Counter
+import numpy
+import matplotlib.pyplot as plt
+import pandas
+
+import math
+from keras.models import Sequential
+from keras.layers import Dense
+from keras.layers import LSTM
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.metrics import mean_squared_error
+import os.path
+import numpy as np
+import pickle
 
 app = Flask(__name__)
 
@@ -180,7 +193,6 @@ def get_commits(board_id, days_before):
                     result_dict[date] = {"additions": additions,
                                          "deletions": deletions, "date": date}
 
-
     result = []
     for date, addDelTuple in result_dict.items():
         response_dict = {'date': date, 'additions': addDelTuple['additions'], 'deletions': addDelTuple['deletions']}
@@ -264,6 +276,60 @@ def get_velocity(board_id, days_before):
         start_date = start_date.strftime("%Y%m%d")
         response_dict["date"] = start_date
         result.append(response_dict)
+
+    response = jsonify(result)
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    return response
+
+
+@app.route('/sprint_time_line/velocity_forecast/<int:board_id>')
+def get_velocity_forecast(board_id):
+    start = datetime.now() - timedelta(5000)
+    db = get_db()
+    sprints = db.sprints
+
+    # mean = compute_mean(board_id)
+    filtered_sprints = list(sprints.find({'board_id': board_id, 'state': 'CLOSED', 'startDate': {'$gte': start}},
+                                         {"board_id": 1,
+                                          "startDate": 1,
+                                          "completedIssuesEstimateSum": 1,
+                                          "name": 1,
+                                          "issuesNotCompletedEstimateSum": 1}))
+
+    result = []
+
+    last_sprint = filtered_sprints[len(filtered_sprints) - 1]
+    last_date = last_sprint['startDate']
+    end_date = last_date + timedelta(days=60)
+
+    end_date = end_date.strftime("%Y%m%d")
+    last_date = last_date.strftime("%Y%m%d")
+
+    model_dict = read_or_create_predictions()
+    predictions = model_dict[board_id]
+
+    for sprint in filtered_sprints:
+        response_dict = {}
+        not_completed = sprint['issuesNotCompletedEstimateSum']
+        completed = sprint['completedIssuesEstimateSum']
+        if not_completed is None and completed is None:
+            continue
+        if not_completed is None:
+            not_completed = 0
+
+        committed = not_completed + completed
+        ration = float(completed) / float(committed)
+        response_dict["Percentage Completed"] = round(100.0 * ration)
+
+        start_date = sprint['startDate']
+
+        start_date = start_date.strftime("%Y%m%d")
+        response_dict["date"] = start_date
+        response_dict["lastDate"] = last_date
+        result.append(response_dict)
+
+    response_dict = {"date": end_date, "lastDate": last_date, "Percentage Completed": round(predictions[-1])}
+    result.append(response_dict)
 
     response = jsonify(result)
     response.headers.add('Access-Control-Allow-Origin', '*')
@@ -538,8 +604,117 @@ def mean_build_percentage():
     return mean(result)
 
 
+def get_sprint_details(board_id):
+    start = datetime.now() - timedelta(5000)
+    db = get_db()
+    sprints = db.sprints
+
+    filtered_sprints = list(sprints.find({'board_id': board_id, 'state': 'CLOSED', 'startDate': {'$gte': start}},
+                                         {"board_id": 1,
+                                          "startDate": 1,
+                                          "completedIssuesEstimateSum": 1,
+                                          "name": 1,
+                                          "issuesNotCompletedEstimateSum": 1}))
+
+    result = []
+
+    for sprint in filtered_sprints:
+        response_dict = {}
+        not_completed = sprint['issuesNotCompletedEstimateSum']
+        completed = sprint['completedIssuesEstimateSum']
+        if not_completed is None and completed is None:
+            continue
+        if not_completed is None:
+            not_completed = 0
+
+        committed = not_completed + completed
+        ration = float(completed) / float(committed)
+        response_dict["Percentage Completed"] = round(100.0 * ration)
+
+        start_date = sprint['startDate']
+
+        start_date = start_date
+        response_dict["date"] = start_date
+        result.append(response_dict)
+
+    sorted_result = sorted(result, key=lambda k: k['date'])
+    return sorted_result
+
+
+def get_predictions(board_id):
+    sorted_result = get_sprint_details(board_id)
+    dataset = pd.DataFrame(sorted_result)
+
+    if len(sorted_result) <= 3:
+        return None
+
+    row = dataset[['Percentage Completed']]
+    dataset = row.values.astype('float32')
+    scaler = MinMaxScaler(feature_range=(0, 1))
+    dataset = scaler.fit_transform(dataset)
+
+    d = pd.DataFrame(dataset)
+    look_back = 1
+    trainX, trainY = create_dataset(dataset, look_back)
+    trainX = numpy.reshape(trainX, (trainX.shape[0], 1, trainX.shape[1]))
+
+    model = Sequential()
+    model.add(LSTM(4, input_shape=(1, look_back)))
+    model.add(Dense(1))
+    model.compile(loss='mean_squared_error', optimizer='adam')
+    model.fit(trainX, trainY, epochs=100, batch_size=1, verbose=0)
+
+    prev = np.array([trainX[len(trainX) - 1]])
+    next = np.array(model.predict(prev))
+    print(next)
+    testPredict = next
+    prev = np.array([next])
+
+    future_predict = 3
+    for x in range(future_predict - 1):
+        next = np.array(model.predict(prev))
+        print(next)
+        testPredict = np.concatenate((testPredict, next), axis=0)
+        prev = np.array([next])
+
+    testPredict = scaler.inverse_transform(testPredict)
+    return testPredict.flatten().tolist()
+
+
+def create_dataset(dataset, look_back=1):
+    dataX, dataY = [], []
+    for i in range(len(dataset) - look_back - 1):
+        a = dataset[i:(i + look_back), 0]
+        dataX.append(a)
+        dataY.append(dataset[i + look_back, 0])
+    return numpy.array(dataX), numpy.array(dataY)
+
+
+def read_or_create_predictions():
+    db = get_db()
+    model_dict = {}
+    dir_path = os.path.dirname(os.path.realpath(__file__))
+
+    if not os.path.isfile(dir_path + '/static/predictions.pickle'):
+        mg_boards = db.boards
+
+        cursor = mg_boards.find({}, {'_id': 1})
+        boards = [board['_id'] for board in cursor]
+        for board in boards:
+            predictions = get_predictions(board)
+            if predictions is not None:
+                model_dict[board] = predictions
+
+        with open(dir_path + '/static/predictions.pickle', 'wb') as handle:
+            pickle.dump(model_dict, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    else:
+        with open(dir_path + '/static/predictions.pickle', 'rb') as handle:
+            model_dict = pickle.load(handle)
+    return model_dict
+
+
 if __name__ == '__main__':
-    # get_sprints_by_board_id_with(491, 365)
-    # get_bug_timeline(600, 365)
+    model_dict = read_or_create_predictions()
+    # print(model_dict)
     app.run('0.0.0.0')
-    commit_stats()
+    # commit_stats()
