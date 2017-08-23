@@ -146,21 +146,45 @@ def commit_stats():
     return jsonify(response)
 
 
+def toWeek(date):
+    '''(date,volume) -> date of the Sunday of that week'''
+    sunday = date.strftime('%Y-%U-0')
+    return datetime.strptime(sunday, '%Y-%U-%w').strftime('%Y%m%d')
+
+
 @app.route('/commit_timeline/<int:board_id>/<int:days_before>')
 def get_commits(board_id, days_before):
     start = datetime.now() - timedelta(days_before)
     db = get_db()
     commits = db.commits
     filtered_commits = commits.find({'board_id': board_id, 'date': {'$gte': start}},
-                                    {"additions": 1, "deletions": 1, "date": 1})
+                                    {"additions": 1, "deletions": 1, "date": 1, "message": 1})
+
+    result_dict = {}
+    for commit in filtered_commits:
+        merge_commit = commit['message'].split(' ') == 'Merge'
+        if "date" in commit and not merge_commit:
+            date = commit["date"]
+            date = toWeek(date)
+
+            additions = int(commit["additions"])
+            deletions = int(commit["deletions"])
+
+            if additions <= 300 and deletions <= 300:
+                if date in result_dict:
+                    prev_addition = result_dict[date]['additions']
+                    prev_deletions = result_dict[date]['deletions']
+                    result_dict[date] = {"additions": additions + prev_addition,
+                                         "deletions": deletions + prev_deletions, "date": date}
+                else:
+                    result_dict[date] = {"additions": additions,
+                                         "deletions": deletions, "date": date}
+
 
     result = []
-    for commit in filtered_commits:
-        if "date" in commit:
-            date = commit["date"]
-            date = date.strftime("%Y%m%d")
-            response_dict = {"additions": commit["additions"], "deletions": commit["deletions"], "date": date}
-            result.append(response_dict)
+    for date, addDelTuple in result_dict.items():
+        response_dict = {'date': date, 'additions': addDelTuple['additions'], 'deletions': addDelTuple['deletions']}
+        result.append(response_dict)
 
     sorted_result = sorted(result, key=lambda k: k['date'])
     response = jsonify(sorted_result)
@@ -517,5 +541,5 @@ def mean_build_percentage():
 if __name__ == '__main__':
     # get_sprints_by_board_id_with(491, 365)
     # get_bug_timeline(600, 365)
-    app.run()
-    # commit_stats()
+    app.run('0.0.0.0')
+    commit_stats()
