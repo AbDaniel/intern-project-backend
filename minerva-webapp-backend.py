@@ -300,7 +300,7 @@ def get_velocity_forecast(board_id):
 
     last_sprint = filtered_sprints[len(filtered_sprints) - 1]
     last_date = last_sprint['startDate']
-    end_date = last_date + timedelta(days=60)
+    end_date = last_date + timedelta(days=120)
 
     end_date = end_date.strftime("%Y%m%d")
     last_date = last_date.strftime("%Y%m%d")
@@ -662,10 +662,11 @@ def get_predictions(board_id):
     model.add(LSTM(4, input_shape=(1, look_back)))
     model.add(Dense(1))
     model.compile(loss='mean_squared_error', optimizer='adam')
+
     model.fit(trainX, trainY, epochs=100, batch_size=1, verbose=0)
 
     prev = np.array([trainX[len(trainX) - 1]])
-    next = np.array(model.predict(prev))
+    next = np.array(model.predict(prev))                    
     print(next)
     testPredict = next
     prev = np.array([next])
