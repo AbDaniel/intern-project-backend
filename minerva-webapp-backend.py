@@ -723,8 +723,8 @@ class Config(object):
             'id': 'job1',
             'func': jobs.update_jira_data,
             'args': [get_db()],
-            'trigger': 'interval',
-            'seconds': 60
+            'trigger': 'cron',
+            'minute': '*/5'
         }
     ]
 
@@ -732,7 +732,6 @@ class Config(object):
 
 if __name__ == '__main__':
     model_dict = read_or_create_predictions()
-    # print(model_dict)
     app.config.from_object(Config())
 
     scheduler = APScheduler()
