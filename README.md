@@ -18,10 +18,6 @@
     db.copyDatabase('poc_teradata', 'poc_teradata', '10.25.237.183')
 ```
 
-## Redis setup
-* Install Redis
-* Start Redis service
-
 ## Python environment setup
 * Install Python 3.6 (Use of Virtual Environment is preferred)
 * Clone the repo
