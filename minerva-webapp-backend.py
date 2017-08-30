@@ -5,7 +5,7 @@ from flask import Flask
 from flask import jsonify, logging
 from itertools import groupby
 
-from flask_apscheduler import APScheduler
+#from flask_apscheduler import APScheduler
 from pymongo import MongoClient
 import pandas as pd
 from datetime import datetime, timedelta
@@ -724,21 +724,24 @@ class Config(object):
             'func': jobs.update_jira_data,
             'args': [get_db()],
             'trigger': 'cron',
-            'minute': '*/5'
+            'minute': '*/2'
+            #'hour': '8,14'
         },
         {
             'id': 'github_update',
             'func': jobs.update_github_data,
             'args': [get_db()],
             'trigger': 'cron',
-            'minute': '*/5'
+            'minute': '*/2'
+            #'hour': '8,14'
         },
         {
             'id': 'jenkins_update',
             'func': jobs.update_jenkins_data,
             'args': [get_db()],
             'trigger': 'cron',
-            'minute': '*/5'
+            'minute': '*/2'
+            #'hour': '8,14'
         }
     ]
 
@@ -748,9 +751,11 @@ if __name__ == '__main__':
     model_dict = read_or_create_predictions()
     app.config.from_object(Config())
 
+    '''
     scheduler = APScheduler()
     scheduler.init_app(app)
     scheduler.start()
+    '''
 
     app.run('0.0.0.0')
     # commit_stats()
