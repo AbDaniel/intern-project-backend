@@ -721,10 +721,10 @@ class Config(object):
     JOBS = [
         {
             'id': 'job1',
-            'func': jobs.printToFile,
-            'args': ['test'],
+            'func': jobs.update_jira_data,
+            'args': [get_db()],
             'trigger': 'interval',
-            'seconds': 2
+            'seconds': 60
         }
     ]
 

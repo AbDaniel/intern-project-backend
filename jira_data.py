@@ -31,12 +31,11 @@ password = 'Ab2Daniel'
 mongo_url = 'mongodb://localhost:27017/'
 
 
-def collected_jira_data(board_id):
+def collected_jira_data(board_ids):
     gh = JIRA(jira_url, basic_auth=(user_name, password))
     client = MongoClient(mongo_url)
     db = client.poc_teradata
 
-    board_ids = board_id
     boards_dict_list = []
     for board_id in board_ids:
         response = requests.get(get_board_url(board_id), auth=(user_name, password)).json()
