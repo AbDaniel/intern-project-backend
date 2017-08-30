@@ -36,7 +36,7 @@ def collected_jira_data(board_id):
     client = MongoClient(mongo_url)
     db = client.poc_teradata
 
-    board_ids = [board_id]
+    board_ids = board_id
     boards_dict_list = []
     for board_id in board_ids:
         response = requests.get(get_board_url(board_id), auth=(user_name, password)).json()
@@ -54,7 +54,7 @@ def collected_jira_data(board_id):
             if sprint.state == 'FUTURE':
                 continue
 
-            response = requests.get(get_sprint_url(board_id, sprint.id), auth=('aw186034', 'GRAY5sky'))
+            response = requests.get(get_sprint_url(board_id, sprint.id), auth=('aw186034', password))
             velocity_data = response.json()
             sprint_dict = {'_id': sprint.id, 'board_id': board_id, 'name': sprint.name, 'state': sprint.state,
 
