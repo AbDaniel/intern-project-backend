@@ -720,8 +720,22 @@ def read_or_create_predictions():
 class Config(object):
     JOBS = [
         {
-            'id': 'job1',
+            'id': 'jira_update',
             'func': jobs.update_jira_data,
+            'args': [get_db()],
+            'trigger': 'cron',
+            'minute': '*/5'
+        },
+        {
+            'id': 'github_update',
+            'func': jobs.update_github_data,
+            'args': [get_db()],
+            'trigger': 'cron',
+            'minute': '*/5'
+        },
+        {
+            'id': 'jenkins_update',
+            'func': jobs.update_jenkins_data,
             'args': [get_db()],
             'trigger': 'cron',
             'minute': '*/5'
