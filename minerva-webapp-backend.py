@@ -2,9 +2,10 @@ import csv
 from statistics import mean
 
 from flask import Flask
-from flask import jsonify
+from flask import jsonify, logging
 from itertools import groupby
 
+from flask_apscheduler import APScheduler
 from pymongo import MongoClient
 import pandas as pd
 from datetime import datetime, timedelta
@@ -22,9 +23,11 @@ from sklearn.metrics import mean_squared_error
 import os.path
 import numpy as np
 import pickle
+import sys
+
+import jobs
 
 app = Flask(__name__)
-
 
 def get_db():
     client = MongoClient('localhost:27017')
@@ -714,8 +717,27 @@ def read_or_create_predictions():
     return model_dict
 
 
+class Config(object):
+    JOBS = [
+        {
+            'id': 'job1',
+            'func': jobs.printToFile,
+            'args': ['test'],
+            'trigger': 'interval',
+            'seconds': 2
+        }
+    ]
+
+    SCHEDULER_API_ENABLED = True
+
 if __name__ == '__main__':
     model_dict = read_or_create_predictions()
     # print(model_dict)
+    app.config.from_object(Config())
+
+    scheduler = APScheduler()
+    scheduler.init_app(app)
+    scheduler.start()
+
     app.run('0.0.0.0')
     # commit_stats()
