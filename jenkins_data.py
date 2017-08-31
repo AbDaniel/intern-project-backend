@@ -74,3 +74,6 @@ def collect_jenkins_data(board_id, jenkins_address, job, repo_org_name, repo_nam
 
     mg_builds = db.builds
     mg_builds.insert_many(build_dict_list)
+
+
+

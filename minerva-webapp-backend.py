@@ -285,9 +285,9 @@ def get_velocity(board_id, days_before):
     return response
 
 
-@app.route('/sprint_time_line/velocity_forecast/<int:board_id>')
-def get_velocity_forecast(board_id):
-    start = datetime.now() - timedelta(5000)
+@app.route('/sprint_time_line/velocity_forecast/<int:board_id>/<int:days_before>')
+def get_velocity_forecast(board_id, days_before):
+    start = datetime.now() - timedelta(days_before)
     db = get_db()
     sprints = db.sprints
 
@@ -539,7 +539,7 @@ def get_bug_timeline(board_id, days_before):
     db = get_db()
     mg_issues = db.issues
 
-    issues = list(mg_issues.find({'board_id': board_id}, {'_id': 0, 'created': 1, 'issueType': 1}))
+    issues = list(mg_issues.find({'board_id': board_id, 'created': {'$gte': start}}, {'_id': 0, 'created': 1, 'issueType': 1}))
 
     for issue in issues:
         issue['created'] = issue['created'].strftime("%Y%m%d")
